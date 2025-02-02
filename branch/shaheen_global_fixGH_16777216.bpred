@@ -1,0 +1,48 @@
+#include "ooo_cpu.h"
+#include <algorithm>
+
+#define BIMODAL_TABLE_SIZE 16777216
+#define GLOBAL_HISTORY_LENGTH 10
+#define GLOBAL_HIST_MASK ((1 << GLOBAL_HISTORY_LENGTH) - 1)
+#define PC_BITS (24 - GLOBAL_HISTORY_LENGTH)  // Using 20 bits total for indexing
+#define PC_MASK ((1 << PC_BITS) - 1)
+#define MAX_COUNTER 3
+
+int8_t bimodal_table[NUM_CPUS][BIMODAL_TABLE_SIZE];
+uint16_t GLOBAL_HISTORY = 0;
+
+inline void clamp(int8_t& value) {
+    value = std::clamp(value, int8_t(0), int8_t(MAX_COUNTER));
+}
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Hybrid Bimodal-Global branch predictor (Concatenation)" << endl;
+    std::fill_n(bimodal_table[cpu], BIMODAL_TABLE_SIZE, 0);
+    GLOBAL_HISTORY = 0;
+}
+
+uint32_t compute_hash(uint64_t ip, uint16_t history)
+{
+    return (((ip & PC_MASK) << GLOBAL_HISTORY_LENGTH) | history) % (BIMODAL_TABLE_SIZE - 1);
+}
+
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+    uint32_t hash = compute_hash(ip, GLOBAL_HISTORY);
+    return (bimodal_table[cpu][hash] >= (int8_t)((MAX_COUNTER + 1)/2)) ? 1 : 0;
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+    uint32_t hash = compute_hash(ip, GLOBAL_HISTORY);
+    
+    if (taken) {
+        bimodal_table[cpu][hash]++;
+    } else {
+        bimodal_table[cpu][hash]--;
+    }
+    clamp(bimodal_table[cpu][hash]);
+
+    GLOBAL_HISTORY = ((GLOBAL_HISTORY << 1) | taken) & GLOBAL_HIST_MASK;
+}

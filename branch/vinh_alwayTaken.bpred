@@ -1,0 +1,26 @@
+#include "ooo_cpu.h"
+#include <algorithm>
+
+#define BIMODAL_TABLE_SIZE 16384
+#define BIMODAL_PRIME 16381
+#define MAX_COUNTER 3
+
+
+inline void clamp(int8_t& value) {
+	//Do nothing
+}
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Alway Taken branch predictor" << endl;
+}
+
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+	return 1; //This mean always taken
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+	//Do nothing
+}

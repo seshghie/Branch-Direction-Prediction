@@ -1,0 +1,78 @@
+#include "ooo_cpu.h"
+#include <algorithm>
+#include <vector>
+
+#define MAX_COUNTER 3
+
+int LH_BITS = 16;
+int PC_BITS = 10;
+
+std::vector<std::vector<int8_t>> local_history_table;  // Table 1
+std::vector<int8_t> counter_table;                     // Table 2
+
+
+inline void clamp(int8_t& value) {
+    if (value < 0) value = 0;
+    else if (value > MAX_COUNTER) value = MAX_COUNTER;
+}
+
+
+void O3_CPU::initialize_branch_predictor()
+{
+    cout << "CPU " << cpu << " Local branch predictor" << endl;
+
+    int table1_size = 1 << PC_BITS; // Size of local history table = 2^PC_BITS
+    int table2_size = 1 << LH_BITS; // Size of counter table = 2^LH_BITS
+
+    // Init local history table with zero LH bits
+    local_history_table.resize(table1_size, std::vector<int8_t>(LH_BITS, 0));
+
+    // Init Table 2
+    counter_table.resize(table2_size, 0);
+}
+
+// Predict branch based on history stored in Table 1 and counter in Table 2
+uint8_t O3_CPU::predict_branch(uint64_t ip)
+{
+    uint32_t index1 = ip % (1 << PC_BITS);  // Index for Table 1 using PC bits
+    uint32_t local_history = 0;
+
+    // Convert history stored in Table 1 to an integer
+    for (int i = 0; i < LH_BITS; i++) {
+        local_history |= (local_history_table[index1][i] << i);
+    }
+
+    // Use history to index into Table 2
+    uint32_t index2 = local_history;
+
+    // Make prediction based on Table 2
+    uint8_t prediction = (counter_table[index2] >= (MAX_COUNTER + 1) / 2) ? 1 : 0;
+    return prediction;
+}
+
+void O3_CPU::last_branch_result(uint64_t ip, uint8_t taken)
+{
+    uint32_t index1 = ip % (1 << PC_BITS);  // Index for Table 1 using PC bits
+    uint32_t local_history = 0;
+
+    // Convert history stored in Table 1 to an integer
+    for (int i = 0; i < LH_BITS; i++) {
+        local_history |= (local_history_table[index1][i] << i);
+    }
+
+    // Update the 2-bit counter in Table 2
+    uint32_t index2 = local_history;
+
+    if (taken) {
+        counter_table[index2]++;
+    } else {
+        counter_table[index2]--;
+    }
+    clamp(counter_table[index2]);
+
+    // Update local history in Table 1 (shift left and insert new outcome)
+    for (int i = LH_BITS - 1; i > 0; i--) {
+        local_history_table[index1][i] = local_history_table[index1][i - 1];
+    }
+    local_history_table[index1][0] = taken;  // Insert current outcome at position 0
+}
